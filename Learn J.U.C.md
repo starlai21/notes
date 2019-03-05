@@ -675,3 +675,426 @@ public class Singleton {
 `volatile` 在 `Java` 并发中用的很多，比如像 `Atomic` 包中的 `value`、以及 `AbstractQueuedLongSynchronizer` 中的 `state` 都是被定义为 `volatile` 来用于保证内存可见性。
 
 将这块理解透彻对我们编写并发程序时可以提供很大帮助。
+
+
+
+## 4. 并发编程的简单分类
+
+**第一种是利用JVM的内部机制。**
+
+**第二种是利用JVM外部的机制，比如JDK或者一些类库。**
+
+### JVM内部机制
+
+#### static 的强制同步机制
+
+```java
+public class Static {
+ 
+     private static String someField1 = someMethod1();
+     
+     private static String someField2;
+     
+     static {
+         someField2 = someMethod2();
+     }
+     
+}
+```
+
+上面的代码在编译之后变为
+
+```java
+public class Static {
+
+    private static String someField1;
+    
+    private static String someField2;
+    
+    static {
+        someField1 = someMethod1();
+        someField2 = someMethod2();
+    }
+    
+}
+```
+
+不过在JVM真正执行这段代码时变为 
+
+```java
+public class Static {
+
+    private static String someField1;
+
+    private static String someField2;
+
+    private static volatile boolean isCinitMethodInvoked = false;
+
+    static {
+        synchronized (Static.class) {
+            if (!isCinitMethodInvoked) {
+                someField1 = someMethod1();
+                someField2 = someMethod2();
+                isCinitMethodInvoked = true;
+            }
+        }
+    }
+
+}
+```
+
+也就是说在实际执行一个类的静态初始化代码块时，虚拟机内部其实对其进行了同步，这就保证了无论多少个线程同时加载一个类，静态块中的代码执行且只执行一次
+
+#### synchronized 同步机制
+
+synchronized是JVM提供的同步机制，它可以修饰方法或者代码块。此外，在修饰代码块的时候，synchronized可以指定锁定的对象，比如常用的有this，类字面常量等。在使用synchronized的时候，通常情况下，我们会针对特定的属性进行锁定，有时也会专门建立一个加锁对象。
+
+```java
+public class Synchronized {
+
+    private List<String> someFields;
+    
+    public void add(String someText) {
+        //some code
+        synchronized (someFields) {
+            someFields.add(someText);
+        }
+        //some code
+    }
+    
+    public Object[] getSomeFields() {
+        //some code
+        synchronized (someFields) {
+            return someFields.toArray();
+        }
+    }
+    
+}
+```
+
+这种方式一般要优于使用this或者类字面常量进行锁定的方式，因为synchronized修饰的非静态成员方法默认是使用的this进行锁定，而synchronized修饰的静态成员方法默认是使用的类字面常量进行的锁定，因此如果直接在synchronized代码块中使用this或者类字面常量，可能会不经意的与synchronized方法产生互斥。通常情况下，使用属性进行加锁，能够更加有效的提高并发度，从而在保证程序正确的前提下尽可能的提高性能。
+
+### JVM外部机制
+
+#### ReentrantLock
+
+ReentrantLock是JDK并发包中locks当中的一个类，专门用于弥补synchronized关键字的一些不足。接下来咱们就看一下synchronized关键字都有哪些不足，接着咱们再尝试使用ReentrantLock去解决这些问题。
+
+**1）synchronized关键字同步的时候，等待的线程将无法控制，只能死等。**
+
+解决方式：ReentrantLock可以使用tryLock(timeout, unit)方法去控制等待获得锁的时间，也可以使用无参数的tryLock方法立即返回，这就避免了死锁出现的可能性。
+
+**2）synchronized关键字同步的时候，不保证公平性，因此会有线程插队的现象。**
+
+解决方式：ReentrantLock可以使用构造方法ReentrantLock(fair)来强制使用公平模式，这样就可以保证线程获得锁的顺序是按照等待的顺序进行的，而synchronized进行同步的时候，是默认非公平模式的，但JVM可以很好的保证线程不被饿死
+
+```java
+public class Lock {
+
+    private ReentrantLock nonfairLock = new ReentrantLock();
+
+    private ReentrantLock fairLock = new ReentrantLock(true);
+
+    private List<String> someFields;
+
+    public void add(String someText) {
+        // 等待获得锁，与synchronized类似
+        nonfairLock.lock();
+        try {
+            someFields.add(someText);
+        } finally {
+            // finally中释放锁是无论如何都不能忘的
+            nonfairLock.unlock();
+        }
+    }
+
+    public void addTimeout(String someText) {
+        // 尝试获取，如果10秒没有获取到则立即返回
+        try {
+            if (!fairLock.tryLock(10, TimeUnit.SECONDS)) {
+                return;
+            }
+        } catch (InterruptedException e) {
+            return;
+        }
+        try {
+            someFields.add(someText);
+        } finally {
+            // finally中释放锁是无论如何都不能忘的
+            fairLock.unlock();
+        }
+    }
+
+}
+```
+
+### JVM内部条件等待机制
+
+Java当中的类有一个共同的父类Object，而在Object中，有一个wait的本地方法，这是一个神奇的方法。
+
+```Java
+public class ObjectWait {
+
+    private volatile static boolean lock;
+
+    public static void main(String[] args) throws InterruptedException {
+        final Object object = new Object();
+
+        Thread thread1 = new Thread(new Runnable() {
+
+            @Override
+            public void run() {
+                System.out.println("等待被通知！");
+                try {
+                    synchronized (object) {
+                        while (!lock) {
+                            object.wait();
+                        }
+                    }
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+                System.out.println("已被通知");
+            }
+        });
+        Thread thread2 = new Thread(new Runnable() {
+
+            @Override
+            public void run() {
+                System.out.println("马上开始通知！");
+                synchronized (object) {
+                    object.notify();
+                    lock = true;
+                }
+                System.out.println("已通知");
+            }
+        });
+        thread1.start();
+        thread2.start();
+        Thread.sleep(100000);
+    }
+}
+```
+
+PS：await, wait 会释放锁， notify 不会
+
+wait,notify和notifyAll方法在使用前，必须获取到当前对象的锁，否则会告诉你非法的监控状态异常。还有一点，则是如果有多个线程在wait等待，那么调用notify会随机通知其中一个线程，而不会按照顺序通知。换句话说，notify的通知机制是非公平的，notify并不保证先调用wait方法的线程优先被唤醒。notifyAll方法则不存在这个问题，它将通知所有处于wait等待的线程。
+
+### JVM外部条件等待机制
+
+上面咱们已经看过JVM自带的条件控制机制，是使用的本地方法wait实现的。那么在JDK的类库中，也有这样的一个类Condition，来弥补wait方法本身的不足。与之前一样，说到这里，咱们就来谈谈wait到底有哪些不足。
+
+**1）wait方法当使用带参数的方法wait(timeout)或者wait(timeout,nanos)时，无法反馈究竟是被唤醒还是到达了等待时间，大部分时候，我们会使用循环（就像上面的例子一样）来检测是否达到了条件**
+
+解决方式：Condition可以使用返回值标识是否达到了超时时间。
+
+**2）由于wait,notify,notifyAll方法都需要获得当前对象的锁，因此当出现多个条件等待时，则需要依次获得多个对象的锁，这是非常恶心麻烦且繁琐的事情。**
+
+解决方式：Condition之需要获得Lock的锁即可，一个Lock可以拥有多个条件。
+
+```java
+package concurrent;
+
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
+
+/**
+ * @author zuoxiaolong
+ *
+ */
+public class ConditionTest {
+
+    private static ReentrantLock lock = new ReentrantLock();
+    
+    public static void main(String[] args) throws InterruptedException {
+        final Condition condition1 = lock.newCondition();
+        final Condition condition2 = lock.newCondition();
+        Thread thread1 = new Thread(new Runnable() {
+            public void run() {
+                lock.lock();
+                try {
+                    System.out.println("等待condition1被通知！");
+                    condition1.await();
+                    System.out.println("condition1已被通知，马上开始通知condition2！");
+                    condition2.signal();
+                    System.out.println("通知condition2完毕！");
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                } finally {
+                    lock.unlock();
+                }
+            }
+        });
+        Thread thread2 = new Thread(new Runnable() {
+            public void run() {
+                lock.lock();
+                try {
+                    System.out.println("马上开始通知condition1！");
+                    condition1.signal();
+                    System.out.println("通知condition1完毕，等待condition2被通知！");
+                    condition2.await();
+                    System.out.println("condition2已被通知！");
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                } finally {
+                    lock.unlock();
+                }
+            }
+        });
+        thread1.start();
+        Thread.sleep(1000);
+        thread2.start();
+    }
+
+}
+```
+
+可以看到，我们只需要获取lock一次就可以了，在内部咱们可以使用两个或多个条件而不再需要多次获得锁。这种方式会更加直观，大大增加程序的可读性。
+
+### JVM外部机制  线程协作
+
+#### CountDownLatch
+
+这个类是为了帮助猿友们方便的实现一个这样的场景，就是某一个线程需要等待其它若干个线程完成某件事以后才能继续进行。比如下面的这个程序。
+
+```java
+public class CountDownLatchTest {
+
+    public static void main(String[] args) throws InterruptedException {
+        final CountDownLatch countDownLatch = new CountDownLatch(10);
+        for (int i = 0; i < 10; i++) {
+            final int number = i + 1;
+            Runnable runnable = new Runnable() {
+                public void run() {
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException e) {}
+                    System.out.println("执行任务[" + number + "]");
+                    countDownLatch.countDown();
+                    System.out.println("完成任务[" + number + "]");
+                }
+            };
+            Thread thread = new Thread(runnable);
+            thread.start();
+        }
+        System.out.println("主线程开始等待...");
+        countDownLatch.await();
+        System.out.println("主线程执行完毕...");
+    }
+    
+}
+```
+
+这个程序的主线程会等待CountDownLatch进行10次countDown方法的调用才会继续执行。
+
+#### CyclicBarrier
+
+这个类是为了帮助猿友们方便的实现多个线程一起启动的场景，就像赛跑一样，只要大家都准备好了，那就开始一起冲。比如下面这个程序，所有的线程都准备好了，才会一起开始执行
+
+```java
+public class CyclicBarrierTest {
+
+    public static void main(String[] args) {
+        final CyclicBarrier cyclicBarrier = new CyclicBarrier(10);
+        for (int i = 0; i < 10; i++) {
+            final int number = i + 1;
+            Runnable runnable = new Runnable() {
+                public void run() {
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException e) {}
+                    System.out.println("等待执行任务[" + number + "]");
+                    try {
+                        cyclicBarrier.await();
+                    } catch (InterruptedException e) {
+                    } catch (BrokenBarrierException e) {
+                    }
+                    System.out.println("开始执行任务[" + number + "]");
+                }
+            };
+            Thread thread = new Thread(runnable);
+            thread.start();
+        }
+    }
+    
+}
+```
+
+#### Semephore
+
+这个类是为了帮助猿友们方便的实现控制数量的场景，可以是线程数量或者任务数量等等。来看看下面这段简单的代码
+
+```java
+public class SemaphoreTest {
+
+    public static void main(String[] args) throws InterruptedException {
+        final Semaphore semaphore = new Semaphore(10);
+        final AtomicInteger number = new AtomicInteger();
+        for (int i = 0; i < 100; i++) {
+            Runnable runnable = new Runnable() {
+                public void run() {
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException e) {}
+                    try {
+                        semaphore.acquire();
+                        number.incrementAndGet();
+                    } catch (InterruptedException e) {}
+                }
+            };
+            Thread thread = new Thread(runnable);
+            thread.start();
+        }
+        Thread.sleep(10000);
+        System.out.println("共" + number.get() + "个线程获得到信号");
+        System.exit(0);
+    }
+    
+}
+```
+
+
+
+
+
+
+
+
+
+#### Exchanger
+
+这个类是为了帮助猿友们方便的实现两个线程交换数据的场景，使用起来非常简单，看看下面这段代码。
+
+```java
+public class ExchangerTest {
+
+    public static void main(String[] args) throws InterruptedException {
+        final Exchanger<String> exchanger = new Exchanger<String>();
+        Thread thread1 = new Thread(new Runnable() {
+            public void run() {
+                try {
+                    System.out.println("线程1等待接受");
+                    String content = exchanger.exchange("thread1");
+                    System.out.println("线程1收到的为：" + content);
+                } catch (InterruptedException e) {}
+            }
+        });
+        Thread thread2 = new Thread(new Runnable() {
+            public void run() {
+                try {
+                    System.out.println("线程2等待接受并沉睡3秒");
+                    Thread.sleep(3000);
+                    String content = exchanger.exchange("thread2");
+                    System.out.println("线程2收到的为：" + content);
+                } catch (InterruptedException e) {}
+            }
+        });
+        thread1.start();
+        thread2.start();
+    }
+    
+}
+```
+
+两个线程在只有一个线程调用exchange方法的时候调用方会被挂起，当都调用完毕时，双方会交换数据。在任何一方没调用exchange之前，线程都会处于挂起状态。
+
