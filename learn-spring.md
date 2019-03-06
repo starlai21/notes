@@ -1,8 +1,8 @@
 # Tiny Spring
 
+https://github.com/code4craft/tiny-spring
 
-
-
+2019/3/6
 
 tags
 
@@ -1202,3 +1202,111 @@ public class AspectJAwareAdvisorAutoProxyCreator implements BeanPostProcessor, B
 
 ## step-10-invite-cglib-and-aopproxy-factory
 
+cglib 的优势在于：即使被代理对象没有实现接口也能实现AOP.
+
+`Enhancer` 的  `callback`相当于 invocationHandler
+
+
+
+```java
+public abstract class AbstractAopProxy implements AopProxy {
+
+    protected AdvisedSupport advised;
+
+    public AbstractAopProxy(AdvisedSupport advised) {
+        this.advised = advised;
+    }
+}
+```
+
+```java
+public class Cglib2AopProxy extends AbstractAopProxy {
+
+   public Cglib2AopProxy(AdvisedSupport advised) {
+      super(advised);
+   }
+
+   @Override
+   public Object getProxy() {
+      Enhancer enhancer = new Enhancer();
+          enhancer.setSuperclass(advised.getTargetSource().getTargetClass());
+      enhancer.setInterfaces(advised.getTargetSource().getInterfaces());
+      enhancer.setCallback(new DynamicAdvisedInterceptor(advised));
+      Object enhanced = enhancer.create();
+      return enhanced;
+   }
+
+   private static class DynamicAdvisedInterceptor implements MethodInterceptor {
+
+      private AdvisedSupport advised;
+
+      private org.aopalliance.intercept.MethodInterceptor delegateMethodInterceptor;
+
+      private DynamicAdvisedInterceptor(AdvisedSupport advised) {
+         this.advised = advised;
+         this.delegateMethodInterceptor = advised.getMethodInterceptor();
+      }
+
+      @Override
+      public Object intercept(Object obj, Method method, Object[] args, MethodProxy proxy) throws Throwable {
+         if (advised.getMethodMatcher() == null
+               || advised.getMethodMatcher().matches(method, advised.getTargetSource().getTargetClass())) {
+            return delegateMethodInterceptor.invoke(new CglibMethodInvocation(advised.getTargetSource().getTarget(), method, args, proxy));
+         }
+         return new CglibMethodInvocation(advised.getTargetSource().getTarget(), method, args, proxy).proceed();
+      }
+   }
+
+   private static class CglibMethodInvocation extends ReflectiveMethodInvocation {
+
+      private final MethodProxy methodProxy;
+
+      public CglibMethodInvocation(Object target, Method method, Object[] args, MethodProxy methodProxy) {
+         super(target, method, args);
+         this.methodProxy = methodProxy;
+      }
+
+      @Override
+      public Object proceed() throws Throwable {
+         return this.methodProxy.invoke(this.target, this.arguments);
+      }
+   }
+
+}
+```
+
+
+
+Test
+
+```java
+public class Cglib2AopProxyTest {
+
+   @Test
+   public void testInterceptor() throws Exception {
+      // --------- helloWorldService without AOP
+      ApplicationContext applicationContext = new ClassPathXmlApplicationContext("tinyioc.xml");
+      HelloWorldService helloWorldService = (HelloWorldService) applicationContext.getBean("helloWorldService");
+      helloWorldService.helloWorld();
+
+      // --------- helloWorldService with AOP
+      // 1. 设置被代理对象(Joinpoint)
+      AdvisedSupport advisedSupport = new AdvisedSupport();
+      TargetSource targetSource = new TargetSource(helloWorldService, HelloWorldServiceImpl.class,
+            HelloWorldService.class);
+      advisedSupport.setTargetSource(targetSource);
+
+      // 2. 设置拦截器(Advice)
+      TimerInterceptor timerInterceptor = new TimerInterceptor();
+      advisedSupport.setMethodInterceptor(timerInterceptor);
+
+      // 3. 创建代理(Proxy)
+        Cglib2AopProxy cglib2AopProxy = new Cglib2AopProxy(advisedSupport);
+      HelloWorldService helloWorldServiceProxy = (HelloWorldService) cglib2AopProxy.getProxy();
+
+      // 4. 基于AOP的调用
+      helloWorldServiceProxy.helloWorld();
+
+   }
+}
+```
