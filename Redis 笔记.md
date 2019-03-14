@@ -4,6 +4,28 @@
 
 ------
 
+## 
+
+## ruby ./redis-trib.rb create  127.0.0.1:6379 127.0.0.1:6380 127.0.0.1:6381
+
+集群  建多个文件夹
+
+config
+
+```
+daemonize yes
+port 6379
+cluster-enabled yes
+cluster-config-file nodes.conf
+cluster-node-timeout 5000
+appendonly yes
+
+```
+
+start.bat
+
+## 
+
 ## 1.1 全局命令
 
 ### 1.1.1 查看所有键
