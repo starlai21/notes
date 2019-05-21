@@ -24,7 +24,7 @@
 
 身份认证流程
 
-1.首先调用Subject.ogin(token)进行登录， 其会自动委托给Security Manager.
+1.首先调用Subject.login(token)进行登录， 其会自动委托给Security Manager.
 
 2.SecurityManager 委托给Authenticator 进行身份验证
 
