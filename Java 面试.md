@@ -54,6 +54,47 @@
 
 
 - 说说自定义注解的场景及实现
+
+[Spring AOP](<http://www.tianxiaobo.com/2018/06/17/Spring-AOP-%E6%BA%90%E7%A0%81%E5%88%86%E6%9E%90%E7%B3%BB%E5%88%97%E6%96%87%E7%AB%A0%E5%AF%BC%E8%AF%BB/>)
+
+Joinpoint 连接点  每一个方法调用都是一个连接点
+
+Pointcut 切点  切点用于选择连接点
+
+Advice 通知  即我们定义的横切逻辑，前置、后置、返回、异常、环绕通知
+
+Aspect 切面  整合了切点和通知两个模块，切点解决了where 问题， 通知解决了when and how 问题。Spring 中的 PointcutAdvisor 用途和切面很像
+
+Weaving 织入 现在我们有了连接点、切点、通知，以及切面等，可谓万事俱备，但是还差了一股东风。这股东风是什么呢？没错，就是织入。所谓织入就是在切点的引导下，将通知逻辑插入到方法调用上，使得我们的通知逻辑在方法调用时得以执行。说完织入的概念，现在来说说 Spring 是通过何种方式将通知织入到目标方法上的。先来说说以何种方式进行织入，这个方式就是通过实现后置处理器 BeanPostProcessor 接口。该接口是 Spring 提供的一个拓展接口，通过实现该接口，用户可在 bean 初始化前后做一些自定义操作。那 Spring 是在何时进行织入操作的呢？答案是在 bean 初始化完成后，即 bean 执行完初始化方法（init-method）。Spring通过切点对 bean 类中的方法进行匹配。若匹配成功，则会为该 bean 生成代理对象，并将代理对象返回给容器。容器向后置处理器输入 bean 对象，得到 bean 对象的代理，这样就完成了织入过程。
+
+
+
+
+
+
+
+Spring 常用注解
+
+@Resource 和 @Autowired 的相同点和不同点
+
+1.相同点：均可标注在字段或属性的setter方法上。
+
+2.不同点：@Autowired 只按照Type注入；@Resource 默认按照Name 自动注入，也提供Type注入；当容器中包含多个同一类型的Bean时，@Autowired 需要结合@Qualifier 进行限定。
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
 - HTTP 请求的 GET 与 POST 方式的区别
 - session 与 cookie 区别
 - session 分布式处理
