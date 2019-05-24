@@ -99,7 +99,29 @@ Spring 常用注解
 - session 与 cookie 区别
 - session 分布式处理
 - JDBC 流程
-- MVC 设计思想
+
+
+
+- [MVC 设计思想](<http://www.tianxiaobo.com/2018/06/29/Spring-MVC-%E5%8E%9F%E7%90%86%E6%8E%A2%E7%A7%98-%E4%B8%80%E4%B8%AA%E8%AF%B7%E6%B1%82%E7%9A%84%E6%97%85%E8%A1%8C%E8%BF%87%E7%A8%8B/>)
+
+一个请求的旅行过程
+
+在探索更深层次的原理之前，我们先来了解一下 Spring MVC 是怎么处理请求的。弄懂了这个流程后，才能更好的理解具体的源码。这里我把 Spring MVC 处理请求的流程图画了出来，一起看一下吧：
+
+![img](https://blog-pictures.oss-cn-shanghai.aliyuncs.com/15300766829012.jpg)
+
+如上，每一个重要的步骤上面都有编号。我先来简单分析一下上面的流程，然后再向大家介绍图中出现的一些组件。我们从第一步开始，首先，用户的浏览器发出了一个请求，这个请求经过互联网到达了我们的服务器。Servlet 容器首先接待了这个请求，并将该请求委托给 DispatcherServlet 进行处理。接着 DispatcherServlet 将该请求传给了处理器映射组件 HandlerMapping，并获取到适合该请求的拦截器和处理器。在获取到处理器后，DispatcherServlet 还不能直接调用处理器的逻辑，需要进行对处理器进行适配。处理器适配成功后，DispatcherServlet 通过处理器适配器 HandlerAdapter 调用处理器的逻辑，并获取返回值 ModelAndView。之后，DispatcherServlet 需要根据 ModelAndView 解析视图。解析视图的工作由 ViewResolver 完成，若能解析成功，ViewResolver 会返回相应的视图对象 View。在获取到具体的 View 对象后，最后一步要做的事情就是由 View 渲染视图，并将渲染结果返回给用户。
+
+以上就是 Spring MVC 处理请求的全过程，上面的流程进行了一定的简化，比如拦截器的执行时机就没说。不过这并不影响大家对主过程的理解。下来来简单介绍一下图中出现的一些组件：
+
+| 组件              | 说明                                                         |
+| ----------------- | ------------------------------------------------------------ |
+| DispatcherServlet | Spring MVC 的核心组件，是请求的入口，负责协调各个组件工作    |
+| HandlerMapping    | 内部维护了一些 <访问路径, 处理器> 映射，负责为请求找到合适的处理器 |
+| HandlerAdapter    | 处理器的适配器。Spring 中的处理器的实现多变，比如用户处理器可以实现 Controller 接口，也可以用 @RequestMapping 注解将方法作为一个处理器等，这就导致 Spring 不止到怎么调用用户的处理器逻辑。所以这里需要一个处理器适配器，由处理器适配器去调用处理器的逻辑 |
+| ViewResolver      | 视图解析器的用途不难理解，用于将视图名称解析为视图对象 View。 |
+| View              | 视图对象用于将模板渲染成 html 或其他类型的文件。比如 InternalResourceView 可将 jsp 渲染成 html。 |
+
 - equals 与 == 的区别
 - 
 - **Exception、Error、运行时异常与一般异常有啥异同**
@@ -112,7 +134,7 @@ Error 和 RuntimeException 及其子类都是未检查的异常 (unchecked excep
 
 面对Unchecked Exceptions, 不应该捕获它，而应该查明原因，修改代码逻辑进行修复。
 
-### 集合
+### 集合   （详见 Java 集合.md）
 
 - List 和 Set 区别
 - List 和 Map 区别
@@ -124,9 +146,20 @@ Error 和 RuntimeException 及其子类都是未检查的异常 (unchecked excep
 - HashMap 的工作原理及代码实现
 - ConcurrentHashMap 的工作原理及代码实现
 
-### 线程
+### [线程](https://www.kancloud.cn/digest/java-thread/107456)
+
+
+
+线程安全是什么
+
+当多个线程访问某个类时，不管运行时环境采用何种调度方式或者这些线程将如何交替进行，并且在主调代码中不需要任何额外的同步或协同，这个类都能表现出正确的行为，那么称这个类是线程安全的
+
+
 
 - 创建线程的方式及实现
+- 
+- 创建线程有几种方式：这个时候应该毫不犹豫的回答1种。面试官会有些惊讶于你的回答，因为似乎他已经习惯了听到Thread和Runnable2种方式的“标准答案”。其实，仔细审题会发现，java创建线程只有一种方式：Thread。Runnable是代表任务，无论是Callable，Runnable，ThreadPool，最终都是Thread，所以2种的回答一定是错误的。
+- 
 - sleep() 、join（）、yield（）有什么区别
 - 说说 CountDownLatch 原理
 - 说说 CyclicBarrier 原理
