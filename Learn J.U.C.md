@@ -1132,6 +1132,14 @@ public class ExchangerTest {
 
 ## 7. 无锁 VS 偏向锁 VS 轻量级锁 VS 重量级锁
 
+
+
+共享锁 ？独占锁？
+
+
+
+
+
 这四种锁是指锁的状态，专门针对synchronized的。在介绍这四种锁状态之前还需要介绍一些额外的知识。
 
 首先为什么Synchronized能实现线程同步？
@@ -1210,3 +1218,8 @@ Monitor是线程私有的数据结构，每一个线程都有一个可用monitor
 ![img](https://awps-assets.meituan.net/mit-x/blog-images-bundle-2018b/8afdf6f2.png)
 
 综上，偏向锁通过对比Mark Word解决加锁问题，避免执行CAS操作。而轻量级锁是通过用CAS操作和自旋来解决加锁问题，避免线程阻塞和唤醒而影响性能。重量级锁是将除了拥有锁的线程以外的线程都阻塞。
+
+
+
+## 8.[生产者和消费者模式](<https://monkeysayhi.github.io/2017/10/08/Java%E5%AE%9E%E7%8E%B0%E7%94%9F%E4%BA%A7%E8%80%85-%E6%B6%88%E8%B4%B9%E8%80%85%E6%A8%A1%E5%9E%8B/>)
+
