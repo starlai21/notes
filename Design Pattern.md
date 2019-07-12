@@ -1,6 +1,6 @@
 # Design Pattern
 
-
+<https://www.cnblogs.com/leeSmall/p/10010006.html>
 
 ## 装饰器模式 Decorator 
 
@@ -280,6 +280,34 @@ public class Singleton {
 上述方式与我们最后一种给出的方式类似，只不过没有经过内部类处理，这种方式最主要的缺点就是一旦我访问了Singleton的任何其他的静态域，就会造成实例的初始化，而事实是可能我们从始至终就没有使用这个实例，造成内存的浪费。
 
 第二种不太常见的，与双重锁定一模一样，只是给**静态的实例属性加上关键字volatile**，标识这个属性是不需要优化的。这样也不会出现实例化发生一半的情况，因为加入了volatile关键字，就等于禁止了JVM自动的指令重排序优化，并且强行保证线程中对变量所做的任何写入操作对其他线程都是即时可见的。这里没有篇幅去介绍volatile以及JVM中变量访问时所做的具体动作，总之volatile会强行将对该变量的所有读和取操作绑定成一个不可拆分的动作。
+
+ 
+
+使用CAS
+
+```java
+public class Singleton {
+    private static final AtomicReference<Singleton> INSTANCE = new AtomicReference<Singleton>();
+
+    private Singleton() {}
+
+    public static Singleton getInstance() {
+        for (;;) {
+            Singleton singleton = INSTANCE.get();
+            if (null != singleton) {
+                return singleton;
+            }
+
+            singleton = new Singleton();
+            if (INSTANCE.compareAndSet(null, singleton)) {
+                return singleton;
+            }
+        }
+    }
+}
+```
+
+缺点是：可能会一直执行不成功，如果N个线程同时执行到singleton = new Singleton(); 的时候，会有大量对象创建，很可能导致内存溢出。
 
 ## [代理模式 Proxy](www.zuoxiaolong.com/html/article_123.html#)
 
@@ -1335,3 +1363,140 @@ public class Client {
 ```
 
 最后总结一下策略模式的使用场景，就是有一系列的可相互替换的算法的时候，我们就可以使用策略模式将这些算法做成接口的实现，并让我们依赖于算法的类依赖于抽象的算法接口，这样可以彻底消除类与具体算法之间的耦合。
+
+
+
+## 简单工厂 
+
+```java
+Chart chart = ChartFactory.getChart(type); 
+```
+
+根据传入参数返回对应的对象， 简单工厂模式存在的问题是当系统引入新产品时， 必定需要修改工厂类的源代码，将违背“开闭原则”；并且工厂类会包含大量的if else代码。
+
+适用场景是：1.工厂类负责创建的对象比较少，不会导致工厂方法中的业务逻辑太多复杂
+
+2.客户端只用知道传入工厂类的参数，对于如何创建对象并不关心
+
+## 工厂方法模式
+
+```java
+    //日志记录器接口：抽象产品
+    interface Logger {
+        public void writeLog();
+    }
+
+    //数据库日志记录器：具体产品
+    class DatabaseLogger implements Logger {
+        public void writeLog() {
+            System.out.println("数据库日志记录。");
+        }
+    }
+
+    //文件日志记录器：具体产品
+    class FileLogger implements Logger {
+        public void writeLog() {
+            System.out.println("文件日志记录。");
+        }
+    }
+
+    //日志记录器工厂接口：抽象工厂
+    interface LoggerFactory {
+        public Logger createLogger();
+    }
+
+    //数据库日志记录器工厂类：具体工厂
+    class DatabaseLoggerFactory implements LoggerFactory {
+        public Logger createLogger() {
+                //连接数据库，代码省略
+                //创建数据库日志记录器对象
+                Logger logger = new DatabaseLogger();
+                //初始化数据库日志记录器，代码省略
+                return logger;
+        }
+    }
+
+    //文件日志记录器工厂类：具体工厂
+    class FileLoggerFactory implements LoggerFactory {
+        public Logger createLogger() {
+                //创建文件日志记录器对象
+                Logger logger = new FileLogger();
+                //创建文件，代码省略
+                return logger;
+        }
+    }
+```
+
+```java
+    class Client {
+        public static void main(String args[]) {
+            LoggerFactory factory;
+            Logger logger;
+            factory = new FileLoggerFactory(); //可引入配置文件实现
+            logger = factory.createLogger();
+            logger.writeLog();
+        }
+    }
+```
+
+```java
+    <!— config.xml -->
+    <?xml version="1.0"?>
+    <config>
+        <className>FileLoggerFactory</className>
+    </config>
+```
+
+```java
+    //工具类XMLUtil.java
+    import javax.xml.parsers.*;
+    import org.w3c.dom.*;
+    import org.xml.sax.SAXException;
+    import java.io.*;
+
+    public class XMLUtil {
+    //该方法用于从XML配置文件中提取具体类类名，并返回一个实例对象
+        public static Object getBean() {
+            try {
+                //创建DOM文档对象
+                DocumentBuilderFactory dFactory = DocumentBuilderFactory.newInstance();
+                DocumentBuilder builder = dFactory.newDocumentBuilder();
+                Document doc;                           
+                doc = builder.parse(new File("config.xml"));
+
+                //获取包含类名的文本节点
+                NodeList nl = doc.getElementsByTagName("className");
+                Node classNode=nl.item(0).getFirstChild();
+                String cName=classNode.getNodeValue();
+
+                //通过类名生成实例对象并将其返回
+                Class c=Class.forName(cName);
+                Object obj=c.newInstance();
+                return obj;
+            }   
+            catch(Exception e) {
+                e.printStackTrace();
+                return null;
+             }
+        }
+    }
+```
+
+```java
+    class Client {
+        public static void main(String args[]) {
+            LoggerFactory factory;
+            Logger logger;
+            factory = (LoggerFactory)XMLUtil.getBean(); //getBean()的返回类型为Object，需要进行强制类型转换
+            logger = factory.createLogger();
+            logger.writeLog();
+        }
+    }
+```
+
+优点：使用工厂方法模式的另一个优点是在系统中加入新产品时，无须修改抽象工厂和抽象产品提供的接口，无须修改客户端，也无须修改其他的具体工厂和具体产品，而只要添加一个具体工厂和具体产品就可以了，这样，系统的可扩展性也就变得非常好，完全符合“开闭原则”。
+
+缺点：在添加新产品时，需要编写新的具体产品类，而且还得提供与之对应的具体工厂类，类的个数将成对增加。
+
+
+

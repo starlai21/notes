@@ -13,3 +13,9 @@ docker run --name esp2 -v /usr/docker/tomcat/webapps:/usr/local/tomcat/webapps -
 
 
  cd /var/lib/docker/
+
+
+
+
+
+docker logs --tail=100 -f tm_esp
